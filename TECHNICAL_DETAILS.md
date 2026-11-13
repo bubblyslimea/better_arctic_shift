@@ -84,6 +84,39 @@ better-arctic collect 1xnxfhv --resume <RUN_ID>
 
 ## source access
 
+### check an approved API connection first
+
+install the optional PRAW client:
+
+```sh
+python -m pip install '.[reddit]'
+```
+
+use credentials for a Reddit application approved for the intended use
+keep `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT` in the worker's environment or secret manager
+the user agent should identify the actual platform, app, version, and Reddit contact account
+no Reddit password or personal browser cookies are needed for this application-only check
+
+```sh
+better-arctic check-access 1xtwlrt
+```
+
+the command returns JSON and exits with `0` on success or `2` when access is not verified
+it checks one public thread and the initial comment listing, with a comment limit of 10
+it does not expand every reply, write an archive, or change anything on Reddit
+the report contains ids and counts, without comment text, credentials, tokens, or response bodies
+
+missing settings return `needs_credentials` before making any request
+authentication failures, HTTP 403, rate limits, redirects, and connection failures have separate statuses
+the check uses only Reddit's OAuth token endpoint and that thread's authenticated comments endpoint
+it follows no redirects and makes at most four requests, including token acquisition and any library retries
+
+PRAW renews application-only tokens when needed during a client session
+this command is a connection probe, not a hosted worker or a shared quota manager for multiple dots
+a successful API check also does not establish access to Reddit's browser interface
+
+the existing collector below continues to use `REDDIT_ACCESS_TOKEN`; `check-access` is independent of that collector
+
 public Reddit access is attempted by default
 if you already have a Reddit OAuth access token, set `REDDIT_ACCESS_TOKEN` in the worker's environment
 the collector then uses `oauth.reddit.com`, and the token is sent only to that host
