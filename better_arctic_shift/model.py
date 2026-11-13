@@ -2,13 +2,11 @@
 
 import hashlib
 import json
-import math
 import re
-from datetime import datetime, timezone
 from urllib.parse import urlparse
+from .history import LIVE, timestamp, iso, removal, capture_states
 
 
-LIVE = {"reddit", "browser", "browser_page"}
 SOURCES = LIVE | {"arctic_shift", "user_report", "pullpush", "wayback"}
 REMOVED = {"deleted", "removed"}
 
@@ -19,24 +17,6 @@ def canonical(value):
 
 def digest(value):
     return hashlib.sha256(value if isinstance(value, bytes) else canonical(value).encode()).hexdigest()
-
-
-def timestamp(value):
-    if value is None or value == "":
-        return None
-    if isinstance(value, str) and not re.fullmatch(r"\d+(\.\d+)?", value):
-        date = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if date.tzinfo is None:
-            raise ValueError("include a timezone with the observation date")
-        value = date.timestamp()
-    result = float(value)
-    if not math.isfinite(result) or result < 0:
-        raise ValueError("the observation date isn't valid")
-    return result
-
-
-def iso(value):
-    return datetime.fromtimestamp(value, timezone.utc).isoformat().replace("+00:00", "Z") if value is not None else None
 
 
 def thread_id(value):
@@ -90,21 +70,6 @@ def walk(payload):
                 stack.append(node["children"])
 
 
-def removal(record, text, category=None):
-    category = category or record.get("removed_by_category")
-    marker = text.strip().lower()
-    actor = None
-    if category == "deleted" or marker == "[deleted]":
-        actor = "user"
-    elif category in {"reddit", "removed by reddit", "anti_evil_ops", "community_ops", "content_takedown", "copyright_takedown"} or marker.startswith("[removed by reddit"):
-        actor = "reddit"
-    elif category in {"moderator", "automod_filtered"} or record.get("banned_by") == "AutoModerator":
-        actor = "mod"
-    elif category or marker == "[removed]" or record.get("removed") is True:
-        actor = "unknown"
-    return {"actor": actor, "category": category, "reason": record.get("mod_reason_title")} if actor else None
-
-
 def observations(record, kind, thread, source, captured):
     if source not in SOURCES:
         raise ValueError("choose a supported observation source")
@@ -114,39 +79,12 @@ def observations(record, kind, thread, source, captured):
     root = "t3_" + thread
     if kind == "t3" and rid != root or kind == "t1" and record.get("link_id") and fullname(record["link_id"], "t3") != root:
         return []
-    text = record.get("body" if kind == "t1" else "selftext", "") or ""
-    if not isinstance(text, str):
-        raise ValueError("the record text isn't a string")
-    meta = record.get("_meta") or {}
-    first = timestamp(record.get("retrieved_on"))
-    second = timestamp(meta.get("retrieved_2nd_on"))
-    dated = [t for t in (first, second) if t is not None]
-    observed = captured if source in LIVE | {"user_report"} else max(dated, default=None)
     base = {"entity_id": rid, "kind": kind, "thread_id": thread,
             "parent_id": fullname(record["parent_id"]) if record.get("parent_id") else (root if kind == "t1" else None),
             "created_utc": timestamp(record.get("created_utc", record.get("created"))) or 0,
-            "source": source, "received_at": captured, "observed_at": observed,
-            "content_at": first if source == "arctic_shift" and meta.get("is_edited") and not meta.get("was_initially_deleted") else observed,
-            "body": text, "title": record.get("title") or "", "author": record.get("author") or "[unknown]",
-            "raw": record, "removal": removal(record, text), "archive_edit_flag": bool(meta.get("is_edited"))}
-    rows = []
-    if source == "arctic_shift" and meta.get("was_deleted_later"):
-        if text.strip() and not text.strip().lower().startswith(("[deleted]", "[removed")):
-            rows.append({**base, "observed_at": first, "content_at": first, "removal": None, "state": "present"})
-        info = removal({}, "", meta.get("removal_type") or "unknown")
-        rows.append({**base, "observed_at": second, "body": "[deleted]" if info["actor"] == "user" else "[removed]",
-                     "removal": info, "state": "deleted" if info["actor"] == "user" else "removed"})
-    else:
-        if source == "arctic_shift" and meta.get("was_initially_deleted"):
-            info = removal({}, "", meta.get("removal_type") or "unknown")
-            rows.append({**base, "observed_at": first, "body": "[deleted]" if info["actor"] == "user" else "[removed]",
-                         "removal": info, "state": "deleted" if info["actor"] == "user" else "removed"})
-            base["removal"] = None
-            base["observed_at"] = second
-            base["content_at"] = second
-        info = base["removal"]
-        state = "deleted" if info and info["actor"] == "user" else "removed" if info else "present" if text.strip() or base["title"] else "unknown"
-        rows.append({**base, "state": state})
+            "source": source, "received_at": captured,
+            "title": record.get("title") or "", "author": record.get("author") or "[unknown]", "raw": record}
+    rows = [{**base, **state} for state in capture_states(record, kind, source, captured)]
     for row in rows:
         row["id"] = digest({k: v for k, v in row.items() if k != "received_at"})
     return rows

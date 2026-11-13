@@ -1,6 +1,7 @@
 """bring captures in, and send thread history back to the scrapbook"""
 
 import html
+import gzip
 import json
 import re
 import time
@@ -66,9 +67,16 @@ def import_scrapbook(store, archive, captures=(), attachments=()):
     with store.db:
         cid = store.capture(thread, "import", "scrapbook import", time.time(), canonical(archive).encode())
         capture_ids = {}
+        normalized = {}
         for request, raw in captures:
             capture_ids[request['id']] = store.capture(thread, request['source'], request['url'],
                 timestamp(request['captured_at']), raw, request.get('status'), request.get('error'))
+            if request['source'] == 'arctic_shift' and raw:
+                try:
+                    payload = json.loads(gzip.decompress(raw) if raw.startswith(b'\x1f\x8b') else raw)
+                except (ValueError, OSError, EOFError):
+                    continue
+                normalized[request['id']], _ = store.ingest(thread, payload, 'arctic_shift', timestamp(request['captured_at']), capture_ids[request['id']])
         for entity in archive["entities"]:
             if entity.get("placeholder"):
                 continue
@@ -79,6 +87,8 @@ def import_scrapbook(store, archive, captures=(), attachments=()):
             for version in entity["versions"]:
                 for observed in version["observations"]:
                     source = observed["source"]
+                    if source == 'arctic_shift' and rid in normalized.get(observed.get('request_id'), set()):
+                        continue
                     if source not in SOURCES:
                         raise ValueError("this archive contains an unsupported source")
                     received = timestamp(observed["observed_at"])
@@ -91,7 +101,7 @@ def import_scrapbook(store, archive, captures=(), attachments=()):
                         raise ValueError("this archive contains an invalid observation")
                     raw = {**{k: v for k, v in version.items() if k not in {"observations", "id", "state", "first_seen", "last_seen"}},
                            "id": rid[3:], "parent_id": entity.get("parent_id"), "link_id": "t3_" + thread,
-                           "score": observed.get("score"), "num_comments": observed.get("num_comments")}
+                           "score": observed.get("score"), "num_comments": observed.get("num_comments"), "edited": observed.get("edited")}
                     if kind == "t3":
                         raw["selftext"] = raw.pop("body", "")
                     row = {"entity_id": rid, "kind": kind, "thread_id": thread,
@@ -218,7 +228,10 @@ def scrapbook(store, value):
                 attachment = media.setdefault(item["id"], item)
                 if entity["id"] not in attachment["entity_ids"]:
                     attachment["entity_ids"].append(entity["id"])
-            content = {"body": row["body"], "title": row["title"], "author": row["author"], "state": row["state"],
+            content = {"body": row["body"], "title": row["title"], "author": row["author"], "state": 'empty' if row["state"] == 'unknown' else row["state"],
+                       "flair": raw.get('flair', raw.get('author_flair_text' if row['kind'] == 't1' else 'link_flair_text')),
+                       "locked": bool(raw.get('locked')), "stickied": bool(raw.get('stickied')), "spoiler": bool(raw.get('spoiler')),
+                       "nsfw": bool(raw.get('over_18', raw.get('nsfw'))), "distinguished": raw.get('distinguished'), "is_submitter": bool(raw.get('is_submitter')),
                        "subreddit": raw.get("subreddit") or "", "permalink": raw.get("permalink") or "",
                        "url": raw.get("url_overridden_by_dest") or raw.get("url") or "",
                        "media_metadata": raw.get("media_metadata") or {}, "gallery_data": raw.get("gallery_data") or {},
@@ -231,7 +244,7 @@ def scrapbook(store, value):
             o = {"source": row["source"], "observed_at": iso(row["observed_at"]) if row["source"] in LIVE | {"user_report"} else received,
                  "source_time": iso(row["observed_at"]), "content_time": iso(row.get("content_at", row["observed_at"])), "request_id": capture_ids.get(row['id']), "score": raw.get("score"),
                  "num_comments": raw.get("num_comments"), "upvote_ratio": raw.get("upvote_ratio"),
-                 "archive_edit_flag": row["archive_edit_flag"]}
+                 "archive_edit_flag": row["archive_edit_flag"], "edited": raw.get('edited')}
             if row["removal"]:
                 o["removal"] = row["removal"]
             v["observations"].append(o)

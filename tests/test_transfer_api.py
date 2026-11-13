@@ -1,4 +1,5 @@
 import contextlib
+import gzip
 import io
 import json
 import tempfile
@@ -14,13 +15,44 @@ from better_arctic_shift.cli import main
 from better_arctic_shift.media import candidates
 from better_arctic_shift.server import handler
 from better_arctic_shift.store import Store
-from better_arctic_shift.transfer import export_file, import_file, scrapbook
+from better_arctic_shift.transfer import export_file, import_file, import_scrapbook, scrapbook
 
 
 THREAD = '1xnxfhv'
 
 
 class TransferTests(unittest.TestCase):
+    def test_legacy_scrapbook_replays_raw_archive_metadata(self):
+        for compressed in (False, True):
+            with self.subTest(compressed=compressed):
+                original, other = Store(':memory:'), Store(':memory:')
+                try:
+                    record = {'id': 'abc', 'body': 'old wording', 'retrieved_on': 100,
+                              '_meta': {'retrieved_2nd_on': 300, 'is_edited': True}}
+                    original.import_payload(THREAD, {'id': 'abc', 'body': 'new wording'}, 'reddit', 200)
+                    original.import_payload(THREAD, record, 'arctic_shift', 600)
+                    archive = scrapbook(original, THREAD)
+                    for entity in archive['entities']:
+                        for version in entity['versions']:
+                            for observed in version['observations']:
+                                observed.pop('content_time', None)
+                    request = next(r for r in archive['requests'] if r['source'] == 'arctic_shift')
+                    raw = json.dumps(record).encode()
+                    if compressed:
+                        raw = gzip.compress(raw)
+                    import_scrapbook(other, archive, [(request, raw)])
+                    self.assertEqual(other.entities(THREAD)['t1_abc']['readable']['body'], 'new wording')
+                    earlier = next(r for r in other.rows(THREAD) if r['body'] == 'old wording')
+                    self.assertEqual(earlier['observed_at'], 300)
+                    self.assertEqual(earlier['content_at'], 100)
+                    self.assertEqual(len(other.rows(THREAD)), 2)
+                    import_scrapbook(other, archive, [(request, raw)])
+                    self.assertEqual(len(other.rows(THREAD)), 2)
+                    self.assertIn(raw, [r[0] for r in other.db.execute('SELECT body FROM captures')])
+                finally:
+                    original.close()
+                    other.close()
+
     def test_imported_scrapbook_attachment_bytes_survive_export(self):
         store = Store(':memory:')
         other = Store(':memory:')

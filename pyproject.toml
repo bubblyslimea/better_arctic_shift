@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "better-arctic-shift"
-version = "0.1.0"
+version = "0.2.0"
 description = "keep Reddit thread observations, text, and changes together"
 requires-python = ">=3.10"
 dependencies = ["zstandard>=0.22,<1"]
@@ -15,3 +15,6 @@ better-arctic = "better_arctic_shift.cli:main"
 [tool.setuptools.packages.find]
 include = ["better_arctic_shift*", "scripts*"]
 exclude = ["scripts.zst_blocks_format*"]
+
+[tool.setuptools.package-data]
+better_arctic_shift = ["history.mjs", "HISTORY_LICENSE"]

@@ -56,6 +56,20 @@ undated historical records cannot overwrite a dated removal
 empty records cannot establish a restoration
 the API's `readable` field selects the newest captured wording by its content date
 
+## shared history rules
+
+`better_arctic_shift/history.py` and `better_arctic_shift/history.mjs` contain the rules used by the Python collector and the scrapbook reader
+both run against the same dated capture cases in `tests/fixtures/history-contract.json`
+
+the scrapbook pins these files to a commit and checks their hashes before building
+opening an older saved thread reinterprets its original Arctic Shift responses with these rules
+original text, live observations, and user-supplied removal evidence stay attached
+
+a later archive status check cannot push older wording ahead of a newer captured edit
+restored comments keep the earlier removal in their history
+Wayback records keep their snapshot dates
+when a scrapbook ZIP includes original Arctic Shift responses, importing it uses those responses to repair older metadata interpretations
+
 ## revisiting threads
 
 ```sh

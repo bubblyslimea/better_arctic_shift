@@ -1,0 +1,360 @@
+[
+  {
+    "name": "later user deletion",
+    "source": "arctic_shift",
+    "record": {
+      "body": "saved words",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_deleted_later": true,
+        "removal_type": "deleted"
+      }
+    },
+    "expected": [
+      {
+        "body": "saved words",
+        "state": "present",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": null,
+        "archive_edit_flag": false
+      },
+      {
+        "body": "[deleted]",
+        "state": "deleted",
+        "observed_at": 300,
+        "content_at": 300,
+        "removal": {
+          "actor": "user",
+          "category": "deleted",
+          "reason": null
+        },
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "later moderator removal",
+    "source": "arctic_shift",
+    "record": {
+      "body": "saved words",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_deleted_later": true,
+        "removal_type": "moderator"
+      }
+    },
+    "expected": [
+      {
+        "body": "saved words",
+        "state": "present",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": null,
+        "archive_edit_flag": false
+      },
+      {
+        "body": "[removed]",
+        "state": "removed",
+        "observed_at": 300,
+        "content_at": 300,
+        "removal": {
+          "actor": "mod",
+          "category": "moderator",
+          "reason": null
+        },
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "restored after reddit removal",
+    "source": "arctic_shift",
+    "record": {
+      "body": "restored words",
+      "retrieved_on": 100,
+      "removed_by_category": "reddit",
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_initially_deleted": true,
+        "removal_type": "removed by reddit"
+      }
+    },
+    "expected": [
+      {
+        "body": "[removed]",
+        "state": "removed",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": {
+          "actor": "reddit",
+          "category": "removed by reddit",
+          "reason": null
+        },
+        "archive_edit_flag": false
+      },
+      {
+        "body": "restored words",
+        "state": "present",
+        "observed_at": 300,
+        "content_at": 300,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "retained wording has its first date",
+    "source": "arctic_shift",
+    "record": {
+      "body": "earlier wording",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "is_edited": true
+      }
+    },
+    "expected": [
+      {
+        "body": "earlier wording",
+        "state": "present",
+        "observed_at": 300,
+        "content_at": 100,
+        "removal": null,
+        "archive_edit_flag": true
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "plain removal has no known actor",
+    "source": "arctic_shift",
+    "record": {
+      "body": "[removed]",
+      "retrieved_on": 100
+    },
+    "expected": [
+      {
+        "body": "[removed]",
+        "state": "removed",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": {
+          "actor": "unknown",
+          "category": null,
+          "reason": null
+        },
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "deleted account keeps its comment",
+    "source": "reddit",
+    "record": {
+      "body": "still here",
+      "author": "[deleted]"
+    },
+    "expected": [
+      {
+        "body": "still here",
+        "state": "present",
+        "observed_at": 500,
+        "content_at": 500,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "live response ignores old archive flags",
+    "source": "reddit",
+    "record": {
+      "body": "restored live",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_deleted_later": true,
+        "removal_type": "deleted"
+      }
+    },
+    "expected": [
+      {
+        "body": "restored live",
+        "state": "present",
+        "observed_at": 500,
+        "content_at": 500,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "undated history stays undated",
+    "source": "arctic_shift",
+    "record": {
+      "body": "saved words"
+    },
+    "expected": [
+      {
+        "body": "saved words",
+        "state": "present",
+        "observed_at": null,
+        "content_at": null,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "wayback keeps snapshot time",
+    "source": "wayback",
+    "record": {
+      "body": "saved page",
+      "_source_time": "1970-01-01T00:02:00Z"
+    },
+    "expected": [
+      {
+        "body": "saved page",
+        "state": "present",
+        "observed_at": 120,
+        "content_at": 120,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "removed post keeps its older text",
+    "source": "arctic_shift",
+    "kind": "t3",
+    "record": {
+      "title": "post",
+      "selftext": "old post",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_deleted_later": true,
+        "removal_type": "moderator"
+      }
+    },
+    "expected": [
+      {
+        "body": "old post",
+        "state": "present",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": null,
+        "archive_edit_flag": false
+      },
+      {
+        "body": "[removed]",
+        "state": "removed",
+        "observed_at": 300,
+        "content_at": 300,
+        "removal": {
+          "actor": "mod",
+          "category": "moderator",
+          "reason": null
+        },
+        "archive_edit_flag": false
+      }
+    ],
+    "captured": 500
+  },
+  {
+    "name": "zero is a valid capture date",
+    "source": "arctic_shift",
+    "record": {
+      "body": "epoch",
+      "retrieved_on": 0
+    },
+    "expected": [
+      {
+        "body": "epoch",
+        "state": "present",
+        "observed_at": 0,
+        "content_at": 0,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "empty response is not restored text",
+    "source": "reddit",
+    "record": {
+      "body": ""
+    },
+    "expected": [
+      {
+        "body": "",
+        "state": "unknown",
+        "observed_at": 500,
+        "content_at": 500,
+        "removal": null,
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  },
+  {
+    "name": "literal removal prefix is still wording",
+    "source": "arctic_shift",
+    "record": {
+      "body": "[removed] is what the old message says",
+      "retrieved_on": 100,
+      "_meta": {
+        "retrieved_2nd_on": 300,
+        "was_deleted_later": true,
+        "removal_type": "removed"
+      }
+    },
+    "expected": [
+      {
+        "body": "[removed] is what the old message says",
+        "state": "present",
+        "observed_at": 100,
+        "content_at": 100,
+        "removal": null,
+        "archive_edit_flag": false
+      },
+      {
+        "body": "[removed]",
+        "state": "removed",
+        "observed_at": 300,
+        "content_at": 300,
+        "removal": {
+          "actor": "unknown",
+          "category": "removed",
+          "reason": null
+        },
+        "archive_edit_flag": false
+      }
+    ],
+    "kind": "t1",
+    "captured": 500
+  }
+]
