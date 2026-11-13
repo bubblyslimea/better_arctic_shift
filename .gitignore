@@ -4,3 +4,11 @@
 *.pyc
 
 schemas_raw
+
+__pycache__/
+*.egg-info/
+.venv/
+build/
+dist/
+.arctic/
+*.sqlite3*

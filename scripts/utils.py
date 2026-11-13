@@ -15,7 +15,7 @@ class FileProgressLog:
 		self.file = file
 		self.fileSize = os.path.getsize(path)
 		self.i = 0
-		self.startTime = time.time()
+		self.startTime = time.monotonic()
 		self.printEvery = 10_000
 		self.maxLineLength = 0
 	
@@ -25,10 +25,10 @@ class FileProgressLog:
 			self.logProgress()
 		
 	def logProgress(self, end=""):
-		progress = self.file.tell() / self.fileSize if not self.file.closed else 1
-		elapsed = time.time() - self.startTime
+		progress = min(1, self.file.tell() / self.fileSize) if self.fileSize and not self.file.closed else 1
+		elapsed = max(0, time.monotonic() - self.startTime)
 		remaining = (elapsed / progress - elapsed) if progress > 0 else 0
-		timePerRow = elapsed / self.i
+		timePerRow = elapsed / self.i if self.i else 0
 		printStr = f"{self.i:,} - {progress:.2%} - elapsed: {formatTime(elapsed)} - remaining: {formatTime(remaining)} - {formatTime(timePerRow)}/row"
 		self.maxLineLength = max(self.maxLineLength, len(printStr))
 		printStr = printStr.ljust(self.maxLineLength)

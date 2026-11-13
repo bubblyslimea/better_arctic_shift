@@ -1,0 +1,201 @@
+# technical details
+
+## getting started
+
+Python 3.10 or newer is needed
+
+```sh
+git clone --recurse-submodules https://github.com/bubblyslimea/better_arctic_shift.git
+cd better_arctic_shift
+python -m venv .venv
+```
+
+activate the environment with `.venv/bin/activate` on Linux or macOS, or `.venv\Scripts\Activate.ps1` in PowerShell
+
+```sh
+python -m pip install -e .
+better-arctic collect https://www.reddit.com/r/jobsearchhell/comments/1xnxfhv/sooo_this_just_happened_should_i_talk_to_my_lawyer/
+better-arctic export 1xnxfhv thread.zip
+```
+
+`python -m better_arctic_shift` works in place of `better-arctic`
+
+the default store is `.arctic/history.sqlite3`, relative to your current directory
+use `better-arctic --db <DATABASE_PATH> ...` to choose another store, where `<DATABASE_PATH>` is your chosen database file
+
+## what gets saved
+
+- raw source responses, including failed responses, with a capture time and source URL
+- dated observations of each post and comment, with the original source fields intact
+- readable text separately from the latest observed removal state
+- unresolved comment ids, missing parents, request failures, and current-status coverage
+- archived media metadata and deduplicated attachment links
+
+the collector queries Arctic Shift for historical material, then Reddit for the current thread and every saved id
+collapsed replies are expanded, including continuations that span multiple batches
+archive-only parents are looked up by id
+
+an absent response is unresolved, never proof that someone deleted a comment
+a deleted account name alone is also not a deleted comment
+moderator, Reddit, and user removal labels are assigned only when the source identifies them
+plain `[removed]` keeps an unknown reason
+
+## history and dates
+
+`received_at` records when this tool received a record
+`observed_at` records when its source observed the state
+these dates stay separate when an old archive is downloaded again
+
+Arctic Shift's `_meta.was_deleted_later` becomes an earlier text observation and a later removal observation
+`_meta.was_initially_deleted` keeps the initial removal and later restored text
+`_meta.is_edited` records that an edit happened without inventing the missing wording
+`content_at` keeps old retained wording from becoming a new text revision just because its status was checked later
+
+the latest dated state wins, with direct Reddit or browser evidence preferred when times are equal
+undated historical records cannot overwrite a dated removal
+empty records cannot establish a restoration
+the API's `readable` field selects the newest captured wording by its content date
+
+## revisiting threads
+
+```sh
+better-arctic watch 1xnxfhv --every 21600
+better-arctic work
+```
+
+this revisits the thread every six hours while the worker is running
+`work --once` processes one due thread and exits, useful with an existing scheduler
+no background service is installed automatically
+
+the queue lives in SQLite
+workers claim jobs with renewable leases, so two workers do not normally collect the same thread at once
+an interrupted worker leaves its successful responses available for the next worker to resume
+completed revisits start fresh runs so old cached responses do not stand in for new status checks
+failed visits back off, and source retry windows survive restarts
+
+to resume a particular partial run manually:
+
+```sh
+better-arctic collect 1xnxfhv --resume <RUN_ID>
+```
+
+`<RUN_ID>` is the id printed by the earlier collection
+`--max-requests` limits a run's network requests, and a run that reaches the limit remains partial
+
+## source access
+
+public Reddit access is attempted by default
+if you already have a Reddit OAuth access token, set `REDDIT_ACCESS_TOKEN` in the worker's environment
+the collector then uses `oauth.reddit.com`, and the token is sent only to that host
+tokens and authorization headers are not saved in the archive
+
+401 and 403 responses are recorded without repeatedly hitting the same blocked host in one run
+429 and temporary server failures honor retry headers and defer work
+HTML challenge pages are saved as failed responses, never interpreted as thread data
+
+when Reddit access fails, historical text is still saved and current statuses remain unchecked
+a dated capture from the scrapbook's browser capture tool can supply observations separately
+
+## imports
+
+```sh
+better-arctic import browser-capture.json
+better-arctic import thread.zip
+better-arctic import records.zst --thread 1xnxfhv
+better-arctic import reddit.json --thread 1xnxfhv --source browser --observed-at 2026-11-13T10:53:13Z
+```
+
+the filenames above are examples
+supported inputs include scrapbook JSON and ZIP files, browser capture envelopes, Reddit JSON, Arctic Shift JSON, JSONL, NDJSON, and `.zst` dumps
+raw live captures need their original observation date so importing an old file does not make it look fresh
+raw dumps are streamed and filtered to the selected thread
+an invalid record rolls back that file's import
+
+native ZIP imports verify checksums and preserve observation ids and raw capture links
+reimporting the same native archive does not duplicate its history
+
+## exports and the scrapbook
+
+```sh
+better-arctic export 1xnxfhv thread.zip
+better-arctic export 1xnxfhv thread.json
+```
+
+the JSON uses the scrapbook's `threadkeeper` schema, version 1
+the ZIP includes:
+
+- `archive.json`, for opening in riri's reddit scrapbook
+- `history.jsonl`, with native observation records and provenance
+- `coverage.json`, with unresolved ids and status coverage
+- `raw/`, containing the saved source responses
+- `manifest.json`, with SHA-256 checksums
+- `index.html`, an escaped, offline text reader
+
+the standalone reader shows saved text and the latest observed removal labels
+use the scrapbook for its full conversation UI
+attachment URLs and metadata are retained, and media already packaged in an imported ZIP stays in later exports
+this collector does not download new media bytes
+`content_time` is included on exported observations for readers that distinguish wording dates from status dates
+the native ZIP keeps the full store observations; the scrapbook JSON is a reader interchange format
+
+## search and context
+
+```sh
+better-arctic search 1xnxfhv "specific phrase"
+better-arctic search 1xnxfhv --removed
+better-arctic history 1xnxfhv t1_19s5dndo5wgqr
+better-arctic coverage 1xnxfhv
+```
+
+search looks through every saved text version, including wording no longer visible on Reddit
+results identify matching comments and include their ancestor chain and descendants
+missing parents appear as placeholders, and cyclic source relationships cannot hang traversal
+
+`status_checked_comments` counts comments with a known direct Reddit or browser observation in the last 24 hours
+user reports can establish a removal observation, but do not count as a direct live check
+Reddit's reported comment count is kept separately from the number of unique captured comments
+
+## local API
+
+```sh
+better-arctic serve --port 8765
+```
+
+the server binds to `127.0.0.1` and only reads saved data
+
+| route | result |
+| --- | --- |
+| `GET /health` | process health |
+| `GET /threads` | saved thread ids |
+| `GET /threads/1xnxfhv` | scrapbook-compatible archive |
+| `GET /threads/1xnxfhv/search?q=phrase&removed=1` | matches with conversation context |
+| `GET /threads/1xnxfhv/history/t1_19s5dndo5wgqr` | status, readable text, and observation history |
+
+## dump reader fixes
+
+the existing `getFileJsonStream` entry point remains available
+UTF-8 is decoded only after a complete record has been assembled
+concatenated Zstandard frames and final lines without a newline work
+malformed JSON, invalid UTF-8, and truncated compressed files raise errors instead of quietly dropping or changing records
+empty JSONL files are valid, empty compressed files are rejected, and valid compressed empty frames are accepted
+
+```sh
+python scripts/processFiles.py <ARCHIVE_PATH> --recursive
+```
+
+`<ARCHIVE_PATH>` is an example placeholder for a file or folder
+folder processing skips directories safely, and progress reporting handles zero records
+legacy `.zst_blocks` files require the checked-out upstream submodule
+
+## checks
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+the regression suite covers Unicode chunk boundaries, damaged archives, removal and restoration ordering, stale imports, missing live ids, continued reply batches, interrupted jobs, rate limits, ZIP integrity, media deduplication, and the local HTTP API
+the jobsearchhell status regression uses the observed comment id and capture dates with sample wording
+upstream data schemas, dataset links, and API documentation remain available alongside this implementation
+
+the source for Arctic Shift's hosted collector and API is not included in upstream's repository
+this fork adds its own thread-focused collector and history service

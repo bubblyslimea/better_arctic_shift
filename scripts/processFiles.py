@@ -1,69 +1,53 @@
-import sys
-version = sys.version_info
-if version.major < 3 or (version.major == 3 and version.minor < 10):
-	raise RuntimeError("This script requires Python 3.10 or higher")
-import os
-from typing import Iterable
+"""walk archive files, with a small hook for your own record processing"""
 
-from fileStreams import getFileJsonStream
-from utils import FileProgressLog
+import argparse
+from pathlib import Path
+
+try:
+    from .fileStreams import getFileJsonStream
+    from .utils import FileProgressLog
+except ImportError:
+    from fileStreams import getFileJsonStream
+    from utils import FileProgressLog
 
 
 fileOrFolderPath = r"<path to file or folder>"
 recursive = False
 
-def processFile(path: str):
-	print(f"Processing file {path}")
-	with open(path, "rb") as f:
-		jsonStream = getFileJsonStream(path, f)
-		if jsonStream is None:
-			print(f"Skipping unknown file {path}")
-			return
-		progressLog = FileProgressLog(path, f)
-		for row in jsonStream:
-			progressLog.onRow()
-			# PUT YOUR CODE HERE
-			
-			# example fields
-			author = row["author"]
-			subreddit = row["subreddit"]
-			id = row["id"]
-			created = row["created_utc"]
-			score = row["score"]
-			# posts only
-			# title = row["title"]
-			# body = row["selftext"]
-			# url = row["url"]
-			# comments only
-			# body = row["body"]
-			# parent = row["parent_id"]	# id/name of the parent comment or post (e.g. t3_abc123 or t1_abc123)
-			# link_id = row["link_id"]	# id/name of the post (e.g. t3_abc123)
-		progressLog.logProgress("\n")
-	
 
-def processFolder(path: str):
-	fileIterator: Iterable[str]
-	if recursive:
-		def recursiveFileIterator():
-			for root, dirs, files in os.walk(path):
-				for file in files:
-					yield os.path.join(root, file)
-		fileIterator = recursiveFileIterator()
-	else:
-		fileIterator = os.listdir(path)
-		fileIterator = (os.path.join(path, file) for file in fileIterator)
-	
-	for i, file in enumerate(fileIterator):
-		print(f"Processing file {i+1: 3} {file}")
-		processFile(file)
+def processFile(path: str, on_record=None):
+    with open(path, "rb") as stream:
+        records = getFileJsonStream(path, stream)
+        if records is None:
+            return 0
+        progress = FileProgressLog(path, stream)
+        for row in records:
+            if on_record:
+                on_record(row)
+            # add your own processing here, or pass on_record
+            progress.onRow()
+        progress.logProgress("\n")
+        return progress.i
+
+
+def processFolder(path: str, on_record=None):
+    root = Path(path)
+    files = root.rglob("*") if recursive else root.iterdir()
+    return sum(processFile(str(file), on_record) for file in sorted(files) if file.is_file())
+
 
 def main():
-	if os.path.isdir(fileOrFolderPath):
-		processFolder(fileOrFolderPath)
-	else:
-		processFile(fileOrFolderPath)
-	
-	print("Done :>")
+    global recursive
+    parser = argparse.ArgumentParser(description="read a file or folder of archive records")
+    parser.add_argument("path", nargs="?", default=fileOrFolderPath)
+    parser.add_argument("--recursive", action="store_true", default=recursive)
+    args = parser.parse_args()
+    recursive = args.recursive
+    if args.path == "<path to file or folder>":
+        parser.error("choose an archive file or folder")
+    count = processFolder(args.path) if Path(args.path).is_dir() else processFile(args.path)
+    print(f"finished reading {count:,} records")
+
 
 if __name__ == "__main__":
-	main()
+    main()
