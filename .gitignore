@@ -12,3 +12,6 @@ build/
 dist/
 .arctic/
 *.sqlite3*
+.env
+.env.*
+praw.ini

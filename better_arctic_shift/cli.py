@@ -16,6 +16,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="keep a thread's text and the changes that follow")
     parser.add_argument("--db", default=".arctic/history.sqlite3", help="where your saved history lives")
     commands = parser.add_subparsers(dest="command", required=True)
+    access = commands.add_parser("check-access", help="check approved Reddit API access without saving thread content")
+    access.add_argument("thread", help="one public thread link or id to check")
     commands.add_parser("init", help="prepare an empty history store")
     capture = commands.add_parser("collect", help="capture a thread and check its saved comment ids")
     capture.add_argument("thread")
@@ -46,6 +48,11 @@ def main(argv=None):
     api = commands.add_parser("serve", help="open the local read-only API")
     api.add_argument("--port", type=int, default=8765)
     args = parser.parse_args(argv)
+    if args.command == "check-access":
+        from .reddit_access import check_access
+        result = check_access(args.thread)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] == "ok" else 2
     store = Store(args.db)
     try:
         result = None

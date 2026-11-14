@@ -9,8 +9,12 @@ description = "keep Reddit thread observations, text, and changes together"
 requires-python = ">=3.10"
 dependencies = ["zstandard>=0.22,<1"]
 
+[project.optional-dependencies]
+reddit = ["praw>=8.0.3,<9"]
+
 [project.scripts]
 better-arctic = "better_arctic_shift.cli:main"
+reddit-reader = "better_arctic_shift.agent_reader:main"
 
 [tool.setuptools.packages.find]
 include = ["better_arctic_shift*", "scripts*"]
